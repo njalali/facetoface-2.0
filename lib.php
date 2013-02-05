@@ -1819,6 +1819,45 @@ function facetoface_user_signup($session, $facetoface, $course, $discountcode,
         return false;
     }
 
+    //Start register user in course
+    if ($new_status == MDL_F2F_STATUS_BOOKED) {
+        //note: this is hardcoded to self enrol plugin for now
+        //TODO: Remove hardcoded enrol plugin and lookup based on config
+        if (!enrol_is_enabled('self')) {
+            error_log('F2F: Self enrol plugin not enabled. Unable to automatically remove user from course');
+            return true;
+        }
+
+        // Load self enrol plugin
+        if (!$enrol = enrol_get_plugin('self')) {
+            error_log('F2F: Could not get self enrol plugin. Unable to automatically remove user from course');
+            return true;
+        }
+
+        // Load facetoface
+        if (!$facetoface = $DB->get_record('facetoface', array('id' => $session->facetoface))) {
+            error_log('F2F: Could not load facetoface instance. Unable to automatically remove user from course');
+            return false;
+        }
+
+        // Load course
+        if (!$course = $DB->get_record('course', array('id' => $facetoface->course))) {
+            error_log('F2F: Could not load course. Unable to automatically remove user from course');
+            return true;
+        }
+
+        if (!$instances = $DB->get_records('enrol', array('enrol'=>'self', 'courseid'=>$course->id, 'status'=>ENROL_INSTANCE_ENABLED), 'sortorder,id ASC')) {
+            error_log('F2F: Could not load self enrol instance. Unable to automatically remove user from course');
+            return true;
+        }
+        $instance = reset($instances);
+
+        //note: this is hardcoded to include role '5' which in our DB maps to 'Learner'
+        //TODO: Remove hardcoded role and lookup role based on config.
+        $enrol->enrol_user($instance, $userid, 5);
+    }
+    //End register user in course
+
     // Add to user calendar -- if facetoface usercalentry is set to true
     if ($facetoface->usercalentry) {
         if (in_array($new_status, array(MDL_F2F_STATUS_BOOKED, MDL_F2F_STATUS_WAITLISTED))) {
@@ -2022,6 +2061,42 @@ function facetoface_user_cancel($session, $userid=false, $forcecancel=false, &$e
         facetoface_remove_session_from_calendar($session, 0, $userid);
 
         facetoface_update_attendees($session);
+
+        //Start remove user from course
+        //note: this is hardcoded to self enrol plugin for now
+        global $DB;
+
+        if (!enrol_is_enabled('self')) {
+            error_log('F2F: Self enrol plugin not enabled. Unable to automatically remove user from course');
+            return true;
+        }
+
+        // Load self enrol plugin
+        if (!$enrol = enrol_get_plugin('self')) {
+            error_log('F2F: Could not get self enrol plugin. Unable to automatically remove user from course');
+            return true;
+        }
+
+        // Load facetoface
+        if (!$facetoface = $DB->get_record('facetoface', array('id' => $session->facetoface))) {
+            error_log('F2F: Could not load facetoface instance. Unable to automatically remove user from course');
+            return false;
+        }
+
+        // Load course
+        if (!$course = $DB->get_record('course', array('id' => $facetoface->course))) {
+            error_log('F2F: Could not load course. Unable to automatically remove user from course');
+            return true;
+        }
+
+        if (!$instances = $DB->get_records('enrol', array('enrol'=>'self', 'courseid'=>$course->id, 'status'=>ENROL_INSTANCE_ENABLED), 'sortorder,id ASC')) {
+            error_log('F2F: Could not load self enrol instance. Unable to automatically remove user from course');
+            return true;
+        }
+        $instance = reset($instances);
+
+        $enrol->unenrol_user($instance, $userid);
+        //End remove user from course
 
         return true;
     }
